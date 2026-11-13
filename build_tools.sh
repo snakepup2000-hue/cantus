@@ -26,4 +26,9 @@ xcrun --sdk macosx clang++ -O2 -std=c++17 -fobjc-arc -target $TARGET \
   -framework AVFoundation -framework CoreFoundation -framework Foundation \
   -o build/cantus-cli
 
-echo "== built build/test_core build/cantus-cli =="
+echo "== bench =="
+xcrun --sdk macosx clang++ -O2 -std=c++17 -target $TARGET \
+  -I. tools/bench_dsd.cpp -L build -lcantuscore -lc++ \
+  -o build/bench_dsd
+
+echo "== built build/test_core build/cantus-cli build/bench_dsd =="

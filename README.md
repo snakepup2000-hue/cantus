@@ -76,7 +76,8 @@ library — the app tests point `CANTUS_LIBRARY_PATH` at a temp file.
   `DSP.swift` is the chain the UI configures
 - `tools/` — `AppTests.swift` (headless tests against the real `ProcessingChain`
   and `PlayerEngine`), `cantus_cli.mm` (a CLI verifier), `probe_render.swift`
-  (renders a file through the real chain and measures the payload), `make_icon.*`
+  (renders a file through the real chain and measures the payload),
+  `bench_dsd.cpp` (cost per second of audio at each DSD rate), `make_icon.*`
 - `test/test_core.cpp` — numeric tests for the core on its own
 
 ## Output rate
@@ -94,6 +95,12 @@ album streams continuously.
 DSD always runs through the modulator, so it is resampled from the source rate by
 definition. Match-track preserves the *rate*, not bit-perfection — volume, the
 clip guard and dither still apply.
+
+DSD is expensive. `./build/bench_dsd` measures the cost per second of audio on this
+machine: DSD64 runs at about 6x realtime, DSD128 at 3x, DSD256 at 1.5x. DSD256 is
+therefore only just inside real time, and a busy machine can starve the stream —
+which sounds like noise, because a DAC fed an interrupted DSD stream has nothing to
+interpolate. DSD128 is the safer choice if the Mac is doing other work.
 
 ## Setting up your Pi
 
