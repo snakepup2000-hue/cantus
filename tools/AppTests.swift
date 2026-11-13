@@ -483,7 +483,7 @@ func testErrors() {
     // Unreachable host: the probe must fail with a useful message.
     var cfg = NetworkSink.Config()
     cfg.host = "192.0.2.123"          // TEST-NET-1, guaranteed unroutable
-    cfg.user = "up"
+    cfg.user = PiRig.user
     cfg.sshKeyPath = nil
     var threw = false
     var msg = ""
@@ -498,18 +498,32 @@ func testErrors() {
           "the unreachable-Pi error is descriptive: \"\(msg)\"")
 }
 
+/// The live tests need a real Pi. They are skipped, not failed, when none is
+/// configured: the suite must pass on a machine with no DAC attached.
+func piTarget() -> NetworkSink.Config? {
+    guard let host = ProcessInfo.processInfo.environment["PIBRIDGE_HOST"], !host.isEmpty else {
+        return nil
+    }
+    var cfg = NetworkSink.Config()
+    cfg.host = host
+    cfg.user = PiRig.user
+    cfg.device = PiRig.device
+    cfg.sshKeyPath = PiRig.sshKeyPath
+    return cfg
+}
+
 @MainActor
 func testPiProbe() {
     section("network: live Pi + DAC probe")
-    var cfg = NetworkSink.Config()
-    cfg.host = "192.168.86.20"
-    cfg.user = "up"
-    cfg.sshKeyPath = "~/.ssh/hermes_pi"
+    guard let cfg = piTarget() else {
+        print("  skip no Pi configured; set PIBRIDGE_HOST to test against one")
+        return
+    }
     do {
         let text = try NetworkSink.probe(cfg, timeout: 8)
-        check(text.lowercased().contains("r2r"), "Pi reachable and the K11 R2R is reported")
-        check(text.contains("DSD_U32_BE"), "DAC advertises native DSD")
-        check(text.contains("384000"), "DAC advertises 384 kHz")
+        let card = NetworkSink.firstCardName(text)
+        check(card != nil, "Pi reachable and a sound card is reported (\(card ?? "none"))")
+        check(text.contains("Playback:"), "the card reports a playback stream")
     } catch {
         check(false, "Pi probe failed: \((error as NSError).localizedDescription)")
     }
@@ -521,12 +535,13 @@ func testPiProbe() {
 func testEngineNetwork(root: URL, seconds: Double) {
     section("engine: network playback to the Pi via the app's own sink")
 
+    guard let cfg = piTarget() else {
+        print("  skip no Pi configured; set PIBRIDGE_HOST to test against one")
+        return
+    }
     let engine = PlayerEngine()
     engine.transport = .network
-    engine.network.host = "192.168.86.20"
-    engine.network.user = "up"
-    engine.network.sshKeyPath = "~/.ssh/hermes_pi"
-    engine.network.device = "hw:CARD=R2R,DEV=0"
+    engine.network = cfg
     engine.outputFormat = OutputFormat()
     engine.outputFormat.encoding = .pcm32
     engine.outputFormat.rate = 384000

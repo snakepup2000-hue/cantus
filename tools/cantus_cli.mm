@@ -230,10 +230,15 @@ int main(int argc, char** argv) {
         if (argc < 2) { usage(); return 2; }
         std::string mode = argv[1];
 
-        // Same rig defaults as app/Cantus/Sinks.swift (PiRig); keep in step.
-        std::string user = "up", host = "192.168.86.20";
-        std::string key = "~/.ssh/hermes_pi";
-        std::string device = "hw:CARD=R2R,DEV=0";
+        // Same defaults as app/Cantus/Sinks.swift (PiRig); keep in step.
+        // Override with --host/--user/--key/--device or the PIBRIDGE_* env vars.
+        auto envOr = [](const char* n, const char* d) {
+            const char* v = std::getenv(n); return (v && *v) ? v : d;
+        };
+        std::string host = envOr("PIBRIDGE_HOST", "raspberrypi.local");
+        std::string user = envOr("PIBRIDGE_USER", "pi");
+        std::string key = envOr("PIBRIDGE_KEY", "~/.ssh/id_ed25519");
+        std::string device = envOr("PIBRIDGE_DEVICE", "hw:0,0");
         double seconds = 10.0;
         int dsdMult = 0;
         bool native = false;

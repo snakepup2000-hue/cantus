@@ -140,19 +140,28 @@ final class LocalSink: AudioSink {
 
 // MARK: - Rig defaults
 
-/// Defaults for the rig this was built against, in one place.
+/// Where to look for the Pi, in one place.
 ///
-/// These make the app play with no configuration on the machine it was
-/// developed on. Every one is overridable in Settings. If you are pointing
-/// Cantus at your own Pi and DAC, edit these four values — nothing else in the
-/// app hardcodes an address.
+/// The defaults are deliberately generic: a Raspberry Pi on your LAN that
+/// answers to its mDNS name, the standard `pi` account, a normal id_ed25519
+/// key. Nothing here knows about anyone's network.
+///
+/// Resolution order for each value: saved setting, then the matching
+/// environment variable (PIBRIDGE_HOST / _USER / _KEY / _DEVICE), then the
+/// default below.
 enum PiRig {
-    static let host = "192.168.86.20"
-    static let user = "up"
-    static let device = "hw:CARD=R2R,DEV=0"
-    static let sshKeyPath = "~/.ssh/hermes_pi"
+    static let host: String = env("PIBRIDGE_HOST") ?? "raspberrypi.local"
+    static let user: String = env("PIBRIDGE_USER") ?? "pi"
+    static let device: String = env("PIBRIDGE_DEVICE") ?? "hw:0,0"
+    static let sshKeyPath: String = env("PIBRIDGE_KEY") ?? "~/.ssh/id_ed25519"
+
     /// Shown in the UI where the destination is named.
     static let label = "Raspberry Pi (\(host))"
+
+    private static func env(_ name: String) -> String? {
+        guard let v = ProcessInfo.processInfo.environment[name], !v.isEmpty else { return nil }
+        return v
+    }
 }
 
 // MARK: - Network sink (Raspberry Pi + USB DAC)
@@ -201,7 +210,8 @@ final class NetworkSink: AudioSink {
         ]
         if let k = expandedKey(c.sshKeyPath) { args += ["-i", k, "-o", "IdentitiesOnly=yes"] }
         args += ["\(c.user)@\(c.host)",
-                 "echo '===PLAYBACK==='; aplay -l 2>&1; echo '===DAC==='; cat /proc/asound/card0/stream0 2>/dev/null"]
+                 "echo '===PLAYBACK==='; aplay -l 2>&1; echo '===DAC==='; "
+                 + "for s in /proc/asound/card*/stream0; do cat $s 2>/dev/null; done"]
         p.arguments = args
         let out = Pipe()
         p.standardOutput = out
@@ -219,12 +229,30 @@ final class NetworkSink: AudioSink {
                           userInfo: [NSLocalizedDescriptionKey:
                             "Pi unreachable at \(c.host): \(text.isEmpty ? "ssh exited \(p.terminationStatus)" : text)"])
         }
-        if !text.lowercased().contains("r2r") {
+        if !text.lowercased().contains("usb-audio") && !text.lowercased().contains("playback:") {
             throw NSError(domain: "Cantus", code: 22,
                           userInfo: [NSLocalizedDescriptionKey:
-                            "Reached the Pi but no FiiO K11 R2R DAC was reported. Check USB power and cabling."])
+                            "Reached the Pi but no USB audio device was reported. "
+                            + "Check that the DAC is connected and powered; `aplay -l` on the Pi should list it."])
         }
         return text
+    }
+
+    /// The first ALSA card name in the probe's output, e.g. `[R2R ]`, or nil.
+    /// The probe is generic; naming the card is how the user confirms it found
+    /// the DAC they meant.
+    static func firstCardName(_ probeText: String) -> String? {
+        for line in probeText.split(separator: "\n") {
+            // aplay -l prints "card 0: R2R [FiiO K11 R2R], device 0: USB Audio [...]"
+            guard let cardRange = line.range(of: "card "),
+                  let colon = line[cardRange.upperBound...].firstIndex(of: ":") else { continue }
+            let rest = line[line.index(after: colon)...]
+            if let open = rest.firstIndex(of: "["), let close = rest[open...].firstIndex(of: "]") {
+                let name = rest[rest.index(after: open)..<close].trimmingCharacters(in: .whitespaces)
+                if !name.isEmpty { return name }
+            }
+        }
+        return nil
     }
 
     private var deviceAvailable = false

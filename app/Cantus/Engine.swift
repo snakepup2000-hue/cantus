@@ -445,13 +445,14 @@ final class PlayerEngine {
     func testConnection() {
         statusMessage = "Testing \(network.host)…"
         var cfg = network
-        if cfg.user.isEmpty { cfg.user = "up" }
+        if cfg.user.isEmpty { cfg.user = PiRig.user }
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 let text = try NetworkSink.probe(cfg)
-                let dac = text.contains("R2R") ? "FiiO K11 R2R detected" : "DAC not found"
+                // Name the card the Pi actually reports rather than assuming a model.
+                let card = NetworkSink.firstCardName(text)
                 Task { @MainActor in
-                    self.statusMessage = "Pi reachable · \(dac)"
+                    self.statusMessage = card.map { "Pi reachable · \($0)" } ?? "Pi reachable · no sound card"
                 }
             } catch {
                 let msg = (error as NSError).localizedDescription
