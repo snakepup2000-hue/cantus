@@ -22,3 +22,7 @@ done
 
 iconutil -c icns "$WORK/AppIcon.iconset" -o app/AppIcon.icns
 echo "wrote app/AppIcon.icns"
+
+# A PNG for the README: GitHub does not render .icns.
+cp "$WORK/AppIcon.iconset/icon_256x256.png" docs/icon.png
+echo "wrote docs/icon.png"

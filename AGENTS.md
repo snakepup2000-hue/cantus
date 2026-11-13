@@ -35,13 +35,18 @@ Both scripts force `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` an
 
 ## Output rate
 
-`OutputFormat.rateMode` is `.matchTrack` by default: PCM plays at the source rate when it
-is one of the K11's rates (`OutputFormat.dacRates`), and the engine reopens the sink
-between tracks when the rate changes (observable as `Momentary freq` in
-`/proc/asound/card0/stream0` on the Pi). `.fixed` is the old upsample-everything mode.
+`OutputFormat.rateMode` is `.fixed` by default: everything is resampled to
+`OutputFormat.rate` (384 kHz), so an 88.2 kHz track plays as 384 kHz. `.matchTrack` is
+the opt-in toggle: PCM plays at the source rate when it is one of the K11's rates
+(`OutputFormat.dacRates`) and the engine reopens the sink between tracks when the rate
+changes (observable as `Momentary freq` in `/proc/asound/card0/stream0` on the Pi).
 `ProcessingChain` copies instead of resampling when in and out rates match
 (`passthrough`). DSD always runs the modulator. Match-track preserves the rate, not
 bit-perfection: volume, clip guard and dither still apply.
+
+Don't change this default again without being asked: making match-track the default
+once made an 88.2 kHz track lock the DAC at 88.2 while the user expected upsampling,
+which reads as a regression.
 
 ## Layout
 
@@ -51,9 +56,11 @@ bit-perfection: volume, clip guard and dither still apply.
 - `app/Cantus/` — `App.swift`, `ContentView.swift`, `Browser.swift`, `Settings.swift`,
   `Decoder.swift`, `DSP.swift`, `Engine.swift`, `Library.swift`, `Sinks.swift`,
   `Transport.swift`
-- `tools/` — `AppTests.swift`, `cantus_cli.mm`, `make_icon.swift` + `make_icon.sh`
+- `tools/` — `AppTests.swift`, `cantus_cli.mm`, `probe_render.swift`,
+  `make_icon.swift` + `make_icon.sh`
 - `test/test_core.cpp` — C++ core tests
 - `build_tools.sh` — builds `build/test_core` and `build/cantus-cli`
+- `install.sh` — builds and installs to /Applications (not needed to run it)
 - `verify.sh` — runs `build_app.sh`, `build_tests.sh`, `build_tools.sh`, then both
   suites; `--net` adds the live-Pi playback tests
 

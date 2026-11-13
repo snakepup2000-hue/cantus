@@ -7,7 +7,7 @@ with selectable filters, parametric EQ, convolution, a peak clip guard, and a
 It plays to this Mac, or — the reason it exists — streams to a Raspberry Pi over
 SSH, where `aplay` feeds a USB DAC. The Mac does the DSP; the Pi just clocks.
 
-![icon](app/AppIcon.icns)
+<img src="docs/icon.png" width="128" alt="Cantus icon">
 
 ## What it is not
 
@@ -75,18 +75,21 @@ library — the app tests point `CANTUS_LIBRARY_PATH` at a temp file.
   the queue; `Sinks.swift` has the two outputs (CoreAudio, and SSH to `aplay`);
   `DSP.swift` is the chain the UI configures
 - `tools/` — `AppTests.swift` (headless tests against the real `ProcessingChain`
-  and `PlayerEngine`), `cantus_cli.mm` (a CLI verifier), `make_icon.*`
+  and `PlayerEngine`), `cantus_cli.mm` (a CLI verifier), `probe_render.swift`
+  (renders a file through the real chain and measures the payload), `make_icon.*`
 - `test/test_core.cpp` — numeric tests for the core on its own
 
 ## Output rate
 
-PCM plays at each track's own rate by default. If the rate is one the DAC lists,
-nothing is resampled: `ProcessingChain` copies instead (`passthrough`), because a
-ratio-1 sinc still low-passes at 0.46·fs and delays by half its kernel. A queue
-that changes rate reopens the sink between tracks, so the DAC re-clocks at the
-boundary; a same-rate album streams continuously.
+Everything is resampled to the rate you pick in Settings — 384 kHz by default — so
+an 88.2 kHz track plays as 384 kHz.
 
-Switch to a fixed rate in Settings if you would rather resample everything.
+There is a toggle for the other behaviour, "Play each track at its own rate". With
+it on, PCM plays at the source rate when the DAC lists it and nothing is resampled:
+`ProcessingChain` copies instead (`passthrough`), because a ratio-1 sinc still
+low-passes at 0.46·fs and delays by half its kernel. A queue that changes rate
+reopens the sink between tracks, so the DAC re-clocks at the boundary; a same-rate
+album streams continuously.
 
 DSD always runs through the modulator, so it is resampled from the source rate by
 definition. Match-track preserves the *rate*, not bit-perfection — volume, the
