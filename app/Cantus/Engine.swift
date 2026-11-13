@@ -163,6 +163,9 @@ final class PlayerEngine {
     nonisolated(unsafe) private let shared = AudioState()
     private var thread: Thread?
     private var timer: Timer?
+    /// Identity of the sink currently open. If it changes while a stream is
+    /// live, the running thread and the chain no longer agree, so it restarts.
+    private var openStreamKey = ""
     /// Path of the loaded impulse response, kept so it can be persisted and
     /// restored with the rest of the settings.
     private(set) var irPath: String?
@@ -462,6 +465,18 @@ final class PlayerEngine {
     }
 
     private func pushConfig() {
+        // What the open sink was configured with. Encoding and rate decide both
+        // the aplay flags and the rate the chain resamples to, so a change has
+        // to reopen the sink: otherwise the chain runs at the new rate while
+        // aplay still holds the old one, which plays noise. Network settings are
+        // deliberately not part of the key — the running sink keeps using the
+        // config it started with, consistently, until the next play.
+        let key = "\(transport == .network ? "net" : "local")|\(outputFormat.encoding.rawValue)"
+            + "|\(outputFormat.rate)|\(outputFormat.rateMode.rawValue)|\(outputFormat.dsdMultiple)"
+        let formatChanged = key != openStreamKey
+        let wasLive = (state == .playing || state == .paused) && thread != nil
+        openStreamKey = key
+
         shared.configure(queue: queue, index: queueIndex, format: outputFormat,
                          network: network, networkTransport: transport == .network,
                          repeatAll: repeatMode == .all, repeatOne: repeatMode == .one)
@@ -472,6 +487,23 @@ final class PlayerEngine {
             ? outputFormat.dsdBitRate
             : outputFormat.rate
         updateProcessingText()
+
+        if formatChanged && wasLive {
+            restartStream()
+        }
+    }
+
+    /// Reopens the sink with the current format, keeping the position.
+    private func restartStream() {
+        let resumeAt = elapsed
+        let wasPaused = state == .paused
+        start()                       // retires the old thread and opens a new sink
+        if resumeAt > 0.25 { seek(to: resumeAt) }
+        if wasPaused {
+            state = .paused
+            shared.setPlaying(false)
+            statusMessage = "Paused"
+        }
     }
 
     private func poll() {
@@ -552,6 +584,10 @@ final class PlayerEngine {
 
             chain.outRate = (isNetwork && fmt.isDSD) ? fmt.dsdBitRate : trackRate
             chain.configure(sourceRate: dec.sourceRate)
+            // The chain produces samples at its own rate, which for DSD is the
+            // modulator's bit rate — 32x the word rate the sink runs at. Using
+            // the transport rate here made the position run 32x fast on DSD.
+            let chainRate = Int(chain.outRate)
 
             Task { @MainActor in
                 guard self.shared.epoch == epoch else { return }
@@ -569,7 +605,7 @@ final class PlayerEngine {
             while stillCurrent() {
                 if let t = shared.takeSeek() {
                     dec.seek(toFrame: Int64(t * Double(dec.sourceRate)))
-                    framesOut = Int64(t * Double(trackRate))
+                    framesOut = Int64(t * Double(chainRate))
                     Task { @MainActor in
                         guard self.shared.epoch == epoch else { return }
                         self.elapsed = t
@@ -606,7 +642,7 @@ final class PlayerEngine {
                 }
                 framesOut += Int64(processed.count / 2)
                 shared.noteOutput(peak: sink.lastPayloadPeak, finite: sink.lastPayloadFinite)
-                let secs = Double(framesOut) / Double(trackRate)
+                let secs = Double(framesOut) / Double(chainRate)
                 Task { @MainActor in
                     guard self.shared.epoch == epoch else { return }
                     self.elapsed = secs

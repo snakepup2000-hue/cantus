@@ -257,7 +257,30 @@ final class NetworkSink: AudioSink {
 
     private var deviceAvailable = false
 
+    /// Opens the sink, retrying briefly while the device is releasing.
+    ///
+    /// When a stream closes, the Pi frees the ALSA device a moment after the ssh
+    /// process exits, so a restart — or a format change, which reopens the sink —
+    /// can be refused with "busy" even though nothing else is playing.
     func start(rate: Int, channels: Int, format: OutputFormat) throws {
+        var last: NSError?
+        for attempt in 0..<12 {
+            do {
+                try openOnce(rate: rate, channels: channels, format: format)
+                return
+            } catch let e as NSError {
+                last = e
+                let msg = e.localizedDescription.lowercased()
+                let busy = msg.contains("busy") || msg.contains("in use")
+                if !busy || attempt == 11 { throw e }
+                Thread.sleep(forTimeInterval: 0.3)
+            }
+        }
+        throw last ?? NSError(domain: "Cantus", code: 23,
+                              userInfo: [NSLocalizedDescriptionKey: "Could not open the Pi receiver"])
+    }
+
+    private func openOnce(rate: Int, channels: Int, format: OutputFormat) throws {
         stop()
         let aplayFormat: String
         switch format.encoding {

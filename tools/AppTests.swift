@@ -605,6 +605,48 @@ func testEngineNetwork(root: URL, seconds: Double) {
     check(dsdEngine.outputFinite, "DSD payload is finite")
     drainMain(seconds / 2)
     dsdEngine.stop()
+
+    // Switching output format mid-stream must reopen the sink. Otherwise the
+    // running thread keeps the old format while the chain moves to the new
+    // rate, and a PCM-rate stream ends up in a DSD device: noise until the next
+    // track. A local sink cannot catch this — it ignores the DSD rate — so this
+    // has to run against the Pi.
+    let sw = PlayerEngine()
+    sw.transport = .network
+    sw.network = engine.network
+    sw.outputFormat = OutputFormat()
+    sw.outputFormat.encoding = .pcm32
+    sw.outputFormat.rate = 48000
+    sw.load([QueueItem(url: root.appendingPathComponent("Album/01-first.wav"),
+                       title: "switch", duration: 3)], startAt: 0, autoplay: true)
+    let pcmUp = waitUntil(10) { sw.state == .playing && sw.elapsed > 0.2 }
+    check(pcmUp, "a PCM stream is running before the format change")
+    let beforeChange = sw.elapsed
+
+    sw.outputFormat.encoding = .dsdNative
+    sw.outputFormat.dsdMultiple = 256      // the rate the UI defaults to
+
+    let reopened = waitUntil(12) { sw.outputDescription.contains("DSD256") }
+    check(reopened,
+          "changing to DSD mid-stream reopens the sink: \(sw.outputDescription)")
+    check(sw.state == .playing, "playback continues after the format change")
+    // The seek that restores the position is applied by the new audio thread on
+    // its first block, so it lands a moment after the sink reopens.
+    let restored = waitUntil(6) { sw.elapsed >= beforeChange - 0.5 }
+    check(restored,
+          "the position is preserved across the change (\(String(format: "%.2f", sw.elapsed)) vs \(String(format: "%.2f", beforeChange)))")
+    check(sw.activeAudioThreads == 1,
+          "exactly one audio thread survives the change (\(sw.activeAudioThreads))")
+
+    let advancing = waitUntil(6) { sw.elapsed > beforeChange }
+    check(advancing, "the restarted stream keeps advancing (\(sw.elapsed))")
+    check(sw.outputFinite, "the restarted stream produces finite samples")
+    // The DSD modulator runs at 32x the word rate the sink uses, so accounting
+    // the position in transport frames made it run 32x fast.
+    check(sw.elapsed < 8.0,
+          "the position tracks real time on DSD (elapsed \(String(format: "%.2f", sw.elapsed)) after ~3 s)")
+    drainMain(seconds / 2)
+    sw.stop()
 }
 
 // MARK: - native rate (follow each track)
