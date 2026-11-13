@@ -40,7 +40,12 @@ than silent conversion.
 ```bash
 ./build_app.sh        # core objects -> build/libcantuscore.a, then swiftc -> build/Cantus.app
 open build/Cantus.app
+./install.sh          # or build and copy it to /Applications
 ```
+
+The bundle runs from wherever it is. Settings and the library live in
+`~/Library/Application Support/Cantus`, so building another copy does not disturb
+what the installed one plays.
 
 Both build scripts pin `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`
 and `-target arm64-apple-macos14.0`; there is no CMake or Xcode project, just
