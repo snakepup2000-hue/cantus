@@ -39,7 +39,7 @@ struct OutputFormat: Codable, Equatable {
     var encoding: OutputEncoding = .pcm32
     var rate: Int = 384000          // PCM sample rate, or DSD *word* rate for native DSD
     var dsdMultiple: Int = 256      // 64 / 128 / 256 for DoP and native modes
-    var rateMode: RateMode = .matchTrack
+    var rateMode: RateMode = .fixed
 
     /// Rates the K11 R2R advertises in `stream0`. A track at any other rate —
     /// and DSD output, which always runs through a modulator — uses `rate`.
@@ -59,7 +59,7 @@ struct OutputFormat: Codable, Equatable {
         encoding = try c.decodeIfPresent(OutputEncoding.self, forKey: .encoding) ?? .pcm32
         rate = try c.decodeIfPresent(Int.self, forKey: .rate) ?? 384000
         dsdMultiple = try c.decodeIfPresent(Int.self, forKey: .dsdMultiple) ?? 256
-        rateMode = try c.decodeIfPresent(RateMode.self, forKey: .rateMode) ?? .matchTrack
+        rateMode = try c.decodeIfPresent(RateMode.self, forKey: .rateMode) ?? .fixed
     }
 
     var isDSD: Bool { encoding.isDSD }

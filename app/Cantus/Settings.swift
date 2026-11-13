@@ -70,19 +70,19 @@ struct OutputSettings: View {
                     }
                     .pickerStyle(.segmented)
                 } else {
-                    Toggle("Match each track's rate", isOn: Binding(
-                        get: { engine.outputFormat.rateMode == .matchTrack },
-                        set: { engine.outputFormat.rateMode = $0 ? .matchTrack : .fixed }))
-                    Picker("Fixed rate", selection: $engine.outputFormat.rate) {
+                    Picker("Sample rate", selection: $engine.outputFormat.rate) {
                         ForEach([44100, 48000, 88200, 96000, 176400, 192000,
                                  352800, 384000], id: \.self) { r in
                             Text("\(OutputFormat.kHzLabel(r)) kHz").tag(r)
                         }
                     }
                     .disabled(engine.outputFormat.rateMode == .matchTrack)
+                    Toggle("Play each track at its own rate instead", isOn: Binding(
+                        get: { engine.outputFormat.rateMode == .matchTrack },
+                        set: { engine.outputFormat.rateMode = $0 ? .matchTrack : .fixed }))
+                    Text(rateCaption)
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
-                Text(rateCaption)
-                    .font(.caption2).foregroundStyle(.secondary)
                 Text("The FiiO K11 R2R reports PCM 44.1-384 kHz (S16/S24/S32) and native DSD_U32_BE.")
                     .font(.caption2).foregroundStyle(.secondary)
             }
@@ -96,10 +96,12 @@ struct OutputSettings: View {
             return "DSD always runs through the modulator, so it is resampled from the track's rate."
         }
         if fmt.rateMode == .matchTrack {
-            return "Each track plays at the rate it was recorded at, and the DAC re-clocks between tracks. "
-                 + "Tracks at a rate the K11 does not list play at \(OutputFormat.kHzLabel(fmt.rate)) kHz."
+            return "Each track plays at the rate it was recorded at and the DAC re-clocks between "
+                 + "tracks. Tracks at a rate the K11 does not list play at "
+                 + "\(OutputFormat.kHzLabel(fmt.rate)) kHz."
         }
-        return "Everything is resampled to \(OutputFormat.kHzLabel(fmt.rate)) kHz."
+        return "Everything is resampled to \(OutputFormat.kHzLabel(fmt.rate)) kHz — an 88.2 kHz "
+             + "track plays as \(OutputFormat.kHzLabel(fmt.rate)) kHz."
     }
 }
 

@@ -572,7 +572,8 @@ func testEngineNetwork(root: URL, seconds: Double) {
     let native = PlayerEngine()
     native.transport = .network
     native.network = engine.network
-    native.outputFormat = OutputFormat()          // match-track, PCM 32
+    native.outputFormat = OutputFormat()
+    native.outputFormat.rateMode = .matchTrack    // follow the file's own rate
     let nativeItem = QueueItem(url: nativeURL, title: "native-88k", duration: 4)
     native.load([nativeItem], startAt: 0, autoplay: true)
 
@@ -613,7 +614,12 @@ func testNativeRate() {
     section("rate: follow each track, no resampler at 1:1")
 
     var fmt = OutputFormat()
-    check(fmt.rateMode == .matchTrack, "match-track is the default output mode")
+    check(fmt.rateMode == .fixed, "fixed-rate upsampling is the default output mode")
+    check(fmt.transportRate(sourceRate: 88200) == 384000,
+          "by default an 88.2 kHz track is upsampled to the chosen rate")
+    fmt.rateMode = .matchTrack
+    check(fmt.transportRate(sourceRate: 88200) == 88200,
+          "match-track sends an 88.2 kHz track at 88.2 kHz when selected")
     check(fmt.transportRate(sourceRate: 88200) == 88200,
           "an 88.2 kHz track is sent at 88.2 kHz, not the fixed rate")
     check(fmt.transportRate(sourceRate: 44100) == 44100, "44.1 kHz stays 44.1 kHz")
@@ -624,7 +630,7 @@ func testNativeRate() {
     fmt.rateMode = .fixed
     fmt.rate = 384000
     check(fmt.transportRate(sourceRate: 88200) == 384000,
-          "fixed mode still upsamples everything to the chosen rate")
+          "fixed mode upsamples everything to the chosen rate")
 
     fmt.rateMode = .matchTrack
     fmt.encoding = .dsdNative
