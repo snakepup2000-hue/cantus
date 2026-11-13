@@ -1,0 +1,4 @@
+module CantusCore {
+    header "cantus_core.h"
+    export *
+}

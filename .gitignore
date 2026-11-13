@@ -1,0 +1,15 @@
+# build output
+build/
+dist/
+*.o
+*.a
+*.dSYM/
+.DS_Store
+
+# Xcode
+*.xcuserstate
+xcuserdata/
+
+# editor
+.vscode/
+*.swp
