@@ -1,9 +1,15 @@
 import AppKit
 import Foundation
 
-// Draws the Cantus icon: a dark rounded tile with one continuous sine above a
-// row of sample needles whose envelope follows it — a signal, and the samples
-// that reconstruct it. Rendered at 1024 and downsampled by make_icon.sh.
+// Draws the Cantus icon: a dark rounded tile with a signal whose pitch rises
+// left to right — sparse on the left, tight on the right. That is the one thing
+// this app is really about (changing a track's rate), it is not the PiBridge
+// trace, and it still reads at 16 px because the stroke is one continuous
+// ribbon at constant amplitude.
+//
+// The glyph is inset to the usual macOS content box: the ink never comes closer
+// than ~7% of the canvas to the tile edge, or it looks crowded next to other
+// icons in the Dock.
 //
 // usage: make_icon <out.png>
 
@@ -19,9 +25,9 @@ image.lockFocus()
 let ctx = NSGraphicsContext.current!.cgContext
 ctx.setAllowsAntialiasing(true)
 
-// Tile
-let tile = NSRect(x: 92, y: 92, width: 840, height: 840)
-let tilePath = NSBezierPath(roundedRect: tile, xRadius: 196, yRadius: 196)
+// Tile: 824 pt rounded rect on the 1024 grid, as macOS expects.
+let tile = NSRect(x: 100, y: 100, width: 824, height: 824)
+let tilePath = NSBezierPath(roundedRect: tile, xRadius: 186, yRadius: 186)
 NSGradient(colors: [
     NSColor(srgbRed: 0.085, green: 0.095, blue: 0.125, alpha: 1),
     NSColor(srgbRed: 0.026, green: 0.030, blue: 0.042, alpha: 1),
@@ -30,47 +36,55 @@ NSColor.white.withAlphaComponent(0.09).setStroke()
 tilePath.lineWidth = 3
 tilePath.stroke()
 
-// The mark: one bold sine cycle centred on an axis. PiBridge owns the
-// PCM-to-DSD trace; this is the thing that does the resampling, so the clean
-// continuous signal is the honest mark — and at 16 px a single thick stroke is
-// the only shape that survives.
-let x0: CGFloat = 164
-let x1: CGFloat = 860
+// Glyph box: 632 pt wide, so the 60 pt stroke leaves a 74 pt margin inside the
+// tile — 7.2% of the canvas, in line with other app icons.
+let x0: CGFloat = 196
+let x1: CGFloat = 828
 let span = x1 - x0
 let midY: CGFloat = 512
-let amp: CGFloat = 252
+let amp: CGFloat = 238
 
-func sineY(_ x: CGFloat) -> CGFloat {
-    let phase = 2 * CGFloat.pi * (x - x0) / span
+// A chirp: frequency climbs from `startCycles` to `endCycles` across the span.
+// Phase is the integral, so the spacing changes smoothly instead of stepping.
+let startCycles: CGFloat = 0.75
+let endCycles: CGFloat = 3.4
+let totalCycles = (startCycles + endCycles) / 2
+
+func curveY(_ t: CGFloat) -> CGFloat {
+    // t in 0...1 along the span; local frequency = start + (end-start)*t
+    let phase = 2 * CGFloat.pi * (startCycles * t + (endCycles - startCycles) * t * t / 2)
     return midY + amp * sin(phase)
 }
 
-// Axis, so the curve reads as a signal on a scale rather than a squiggle.
+// Axis: the zero line, so the wave reads as a signal on a scale rather than a
+// squiggle. Thin and dim — it must not compete with the stroke at small sizes.
 let axis = NSBezierPath()
-axis.move(to: NSPoint(x: x0 - 26, y: midY))
-axis.line(to: NSPoint(x: x1 + 26, y: midY))
-axis.lineWidth = 7
+axis.move(to: NSPoint(x: x0 - 30, y: midY))
+axis.line(to: NSPoint(x: x1 + 30, y: midY))
+axis.lineWidth = 6
 axis.lineCapStyle = .round
-NSColor.white.withAlphaComponent(0.18).setStroke()
+NSColor.white.withAlphaComponent(0.22).setStroke()
 axis.stroke()
 
 let curve = NSBezierPath()
-curve.lineWidth = 68
+curve.lineWidth = 60
 curve.lineCapStyle = .round
 curve.lineJoinStyle = .round
-curve.move(to: NSPoint(x: x0, y: sineY(x0)))
-var x = x0
-while x <= x1 {
-    curve.line(to: NSPoint(x: x, y: sineY(x)))
-    x += 3
+curve.move(to: NSPoint(x: x0, y: curveY(0)))
+// Step fine enough near the tight end: the last cycle is ~100 pt, so 2 pt
+// samples keep it smooth without making the path huge.
+let steps = 640
+for i in 1...steps {
+    let t = CGFloat(i) / CGFloat(steps)
+    curve.line(to: NSPoint(x: x0 + span * t, y: curveY(t)))
 }
 accent.setStroke()
 curve.stroke()
 
-// Glow under the stroke so it holds up on a light wallpaper.
+// One soft glow pass, drawn under a shadow rather than re-stroking the path at
+// partial alpha (which would just double the opacity).
 ctx.saveGState()
-ctx.setShadow(offset: .zero, blur: 26, color: accent.withAlphaComponent(0.45).cgColor)
-accent.withAlphaComponent(0.45).setStroke()
+ctx.setShadow(offset: .zero, blur: 22, color: accent.withAlphaComponent(0.40).cgColor)
 curve.stroke()
 ctx.restoreGState()
 
@@ -83,4 +97,5 @@ guard let tiff = image.tiffRepresentation,
     exit(1)
 }
 try png.write(to: URL(fileURLWithPath: outPath))
+_ = totalCycles
 print("wrote \(outPath)")
